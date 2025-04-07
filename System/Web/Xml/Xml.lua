@@ -129,7 +129,7 @@ PLoop(function(_ENV)
     function isChar(code)
         -- #x9 | #xA | #xD | [#x20-#xD7FF] | [#xE000-#xFFFD] | [#x10000-#x10FFFF]
         if not code then return false end
-        if code == 0x9 or code == 0xA or code == 0xD then return true
+        if code == 0x9 or code == 0xA or code == 0xD then return true end
 
         if code < 0x20 then
             return false
@@ -358,7 +358,7 @@ PLoop(function(_ENV)
         local code, len         = decode(xml, start)
 
         -- Skip white space
-        while SPACE_BYTE[code] then
+        while SPACE_BYTE[code] do
             start               = start + len
             code, len           = decode(xml, start)
         end
@@ -388,7 +388,7 @@ PLoop(function(_ENV)
         local code, len         = decode(xml, start)
 
         -- Skip white space
-        while SPACE_BYTE[code] then
+        while SPACE_BYTE[code] do
             start               = start + len
             code, len           = decode(xml, start)
         end
@@ -551,15 +551,13 @@ PLoop(function(_ENV)
             decode              = UTF8Decode
         elseif first == 0 then
             decode              = UTF16BEDecode
-        else
+        elseif first == 0xFF and second == 0xFE then
             decode              = UTF16LEDecode
         else
             return nil, "The PLoop don't support the xml's encoding."
         end
 
-        local start, err        = 1
-
-        start, err              = processXml(document, xml, decode, start)
+        local start, err        = processXml(document, xml, decode, start)
         if not start and err then return nil, err end
 
         return document

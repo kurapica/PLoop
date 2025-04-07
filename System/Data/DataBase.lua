@@ -1861,7 +1861,6 @@ PLoop(function(_ENV)
             tostring                    = tostring,
             next                        = next,
             loadsnippet                 = Toolset.loadsnippet,
-            error                       = error,
 
             Class, Property, Any, List
         }

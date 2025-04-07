@@ -214,7 +214,7 @@ PLoop(function(_ENV)
             if typath == "table" then
                 path, data      = default, path
             elseif typath ~= "string" then
-                path, data      = default
+                path, data      = default, nil
             end
 
             if not path then return self:ServerError() end
@@ -823,7 +823,7 @@ PLoop(function(_ENV)
             if typath == "table" then
                 path, data      = default, path
             elseif typath ~= "string" then
-                path, data      = default
+                path, data      = default, nil
             end
 
             if data and type(data) ~= "table" then data = nil end

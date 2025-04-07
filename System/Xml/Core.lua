@@ -82,7 +82,6 @@ PLoop(function(_ENV)
             BYTE_DOUBLE_QUOTE   = 0x22,    -- "
             BYTE_EQUALS         = 0x3d,    -- =
             BYTE_PERIOD         = 0x2e,    -- .
-            BYTE_QUESTION       = 0x3f,    -- ?
         }
 
         SPACE_BYTE              = {

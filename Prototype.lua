@@ -630,7 +630,7 @@ do
 
             setfenv                     = function (f, t)
                 f = type(f) == 'function' and f or getinfo(f + 1, 'f').func
-                local up, name          = 0
+                local up, name          = 0, nil
                 repeat
                     up                  = up + 1
                     name                = getupvalue(f, up)
@@ -15901,9 +15901,9 @@ do
             --        local args = Attribute.GetAttachedData(__Arguments__, v, A)
             --        local ret = Attribute.GetAttachedData(__Return__, v, A)
             --
-            --        -- System.Number  A:Test(System.String) 
-            --        -- System.Boolean A:Test(System.Number) 
-            --        -- System.String  A:Test(System.Boolean) 
+            --        -- System.Number  A:Test(System.String)
+            --        -- System.Boolean A:Test(System.Number)
+            --        -- System.String  A:Test(System.Boolean)
             --        print(("%s A:Test(%s) "):format(tostring(ret[1][1].type), tostring(args[1].type)))
             --    end
             __Static__()

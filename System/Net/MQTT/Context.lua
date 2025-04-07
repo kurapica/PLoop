@@ -888,7 +888,7 @@ PLoop(function(_ENV)
         function GetClient(self)
             self.Socket.AcceptTimeout   = self.AcceptTimeout
 
-            local ok, client            = true
+            local ok, client            = true, nil
 
             if self.AcceptTimeout and self.AcceptTimeout > 0 then
                 ok, client              = pcall(self.Socket.Accept, self.Socket)
