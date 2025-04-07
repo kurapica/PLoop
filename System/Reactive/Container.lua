@@ -44,6 +44,25 @@ PLoop(function(_ENV)
 
     local containerMap                  = {}
 
+    local initContainer                 = function(self, init)
+        local map                       = containerMap[self] or self[container]
+
+        if type(init) == "table" then
+            for k, v in pairs(init) do
+                -- init value
+                if type(k) == "string" then
+                    local ok, err       = safesetvalue(self, k, v)
+                    if not ok then error("The " .. k .. "'s value is not supported", 2) end
+
+                -- reactive factory
+                elseif type(k) == "number" and type(v) == "function" then
+                    map[0]              = v
+                end
+            end
+        end
+        return self
+    end
+
     --- The container prototype
     container                           = Prototype (ValidateType, {
         __index                         = {
@@ -74,11 +93,15 @@ PLoop(function(_ENV)
                 if visitor and rawget(visitor, last) == nil then
                     rawset(visitor, last, object)
                 end
-                return object
+                return function(init) return initContainer(object, init) end
+
+            -- private container with init
             elseif type(name) == "table" then
                 local object            = Prototype.NewObject(tcontainer)
                 rawset(object, container, {})
-                return object(name)
+                return initContainer(object, name)
+
+            -- private container
             else
                 local object            = Prototype.NewObject(tcontainer)
                 rawset(object, container, {})
@@ -91,11 +114,24 @@ PLoop(function(_ENV)
     --- The private observable container can be used to store reactive values
     tcontainer                          = Prototype {
         __metatable                     = container,
-        __index                         = function(self, key) return (containerMap[self] or self[container])[key] end,
+        __index                         = function(self, key)
+            local map                   = containerMap[self] or self[container]
+            local ret                   = map[key]
+            if ret ~= nil or not map[0] or type(key) ~= "string" then return ret end
+
+            ret                         = map[0](key)
+            if ret ==  nil then return end
+
+            -- Only allow observable
+            if isobjecttype(ret, IObservable) then
+                rawset(map, key, ret)
+                return ret
+            end
+        end,
         __newindex                      = function(self, key, value, stack)
             if type(key) ~= "string" then error("The field can only be string", (stack or 1) + 1) end
-            local raw                   = containerMap[self] or self[container]
-            local react                 = raw[key]
+            local map                   = containerMap[self] or self[container]
+            local react                 = map[key]
             if react then
                 if isobjecttype(react, IReactive) then
                     local ok, err       = safesetvalue(react, "Value", value)
@@ -115,27 +151,16 @@ PLoop(function(_ENV)
                     Attribute.ApplyAttributes (value, ATTRTAR_FUNCTION, nil, self, key, stack)
                     Attribute.AttachAttributes(value, ATTRTAR_FUNCTION, self, key, stack)
                 end
-                rawset(raw, key, value)
+                rawset(map, key, value)
 
             elseif isobjecttype(value, IObservable) then
-                rawset(raw, key, value)
+                rawset(map, key, value)
 
             else
                 react                   = reactive(value, true)
                 if not react then error("The " .. key .. "'s value is not supported", (stack or 1) + 1) end
-                rawset(raw, key, react)
+                rawset(map, key, react)
             end
-        end,
-        __call                          = function(self, init)
-            if type(init) == "table" then
-                for k, v in pairs(init) do
-                    if type(k) == "string" then
-                        local ok, err   = safesetvalue(self, k, v)
-                        if not ok then error("The " .. k .. "'s value is not supported", 2) end
-                    end
-                end
-            end
-            return self
         end,
     }
 
