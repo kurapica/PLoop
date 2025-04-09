@@ -115,15 +115,22 @@ PLoop(function(_ENV)
     tcontainer                          = Prototype {
         __metatable                     = container,
         __index                         = function(self, key)
+            -- map
             local map                   = containerMap[self] or self[container]
             local ret                   = map[key]
-            if ret ~= nil or not map[0] then return ret end
+            if ret ~= nil then return ret end
 
+            -- child namespace
+            local isstr                 = type(key) == "string"
+            local ns                    = isstr and getnamespace(self, key) or nil
+            if ns or not map[0] then return ns end
+
+            -- factory
             ret                         = map[0](key)
             if ret ==  nil then return end
 
             -- cache
-            if type(key) == "string" and isobjecttype(ret, IObservable) then
+            if isstr and isobjecttype(ret, IObservable) then
                 rawset(map, key, ret)
             end
             return ret
