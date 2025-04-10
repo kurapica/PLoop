@@ -85,7 +85,7 @@ PLoop(function(_ENV)
                     rawset(self, ReactiveProxy, proxyes)
 
                     local react         = rawget(self, Reactive)
-                    proxyes[0]          = react:Subscribe(function(key, ...)
+                    proxyes[0]          = isobjecttype(react, IObservable) and react:Subscribe(function(key, ...)
                         local p         = proxyes[key]
                         if p and select("#", ...) < 2 then
                             local n     = react[key]
