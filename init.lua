@@ -56,7 +56,6 @@ require "PLoop.System.Reactive.ReactiveList"
 require "PLoop.System.Reactive.ReactiveDictionary"
 require "PLoop.System.Reactive.Observable"
 require "PLoop.System.Reactive.Operator"
-require "PLoop.System.Reactive.Container"
 require "PLoop.System.Reactive.Watch"
 
 return root
