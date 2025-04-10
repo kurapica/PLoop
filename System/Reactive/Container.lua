@@ -141,6 +141,17 @@ PLoop(function(_ENV)
             local react                 = map[key]
             if react then
                 if isobjecttype(react, IReactive) then
+                    if isobjecttype(value, IReactive) then
+                        value           = value.Value
+                    elseif isobjecttype(value, IObservable) then
+                        if isobjecttype(react, ReactiveValue) then
+                            react.Observable = value
+                            return
+                        else
+                            error("The " .. key .. " is readonly", (stack or 1) + 1)
+                        end
+                    end
+
                     local ok, err       = safesetvalue(react, "Value", value)
                     if not ok then error(err:gsub("Value", key), (stack or 1) + 1) end
                 else
