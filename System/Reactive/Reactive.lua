@@ -745,28 +745,9 @@ PLoop(function(_ENV)
         -------------------------------------------------------------------
         --                          meta-method                          --
         -------------------------------------------------------------------
-        if Class.Validate(targettype) or Interface.Validate(targettype) then
-            -- objects may have its private fields, block those access
-            function __newindex(self, key, value, stack)
-                error("The " .. key .. " can't be written", (stack or 1) + 1)
-            end
-        else
-            --- enable field access for non-member struct data
-            -- Gets the current value
-            function __index(self, key, stack)
-                local raw               = rawget(self, RawTable)
-                return raw and raw[key]
-            end
-
-            -- Set the new value
-            function __newindex(self, key, value, stack)
-                local raw               = rawget(self, RawTable)
-                if not raw then error("The raw object is not specified", (stack or 1) + 1) end
-
-                if raw[key] == value then return end
-                raw[key]                = value
-                return onObjectNext(raw, key, value)
-            end
+        -- objects may have its private fields, block those access
+        function __newindex(self, key, value, stack)
+            error("The " .. key .. " can't be written", (stack or 1) + 1)
         end
     end)
 end)

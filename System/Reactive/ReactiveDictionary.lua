@@ -169,7 +169,7 @@ PLoop(function(_ENV)
 
         if ktype ~= Any or vtype ~= Any then 
             error                       = throw
-            __Arguments__{ ktype, vtype/nil, Number/nil }:Throwable()
+            __Arguments__{ ktype, vtype/nil }:Throwable()
         end
         function __newindex(self, key, value, stack)
             local raw                   = rawget(self, RawTable)
