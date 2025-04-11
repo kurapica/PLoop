@@ -94,7 +94,7 @@ PLoop(function(_ENV)
 
             -- get reactive type
             if metatype == nil then
-                return valtype == "table" and (isarray(value) and ReactiveList or ReactiveDictionary) or nil
+                return valtype == "table" and (isarray(value) and ReactiveList or Reactive) or nil
 
             elseif metatype == Any then
                 return asfield and ReactiveField or ReactiveValue
@@ -196,7 +196,7 @@ PLoop(function(_ENV)
             __call                      = function(self, value, silent, recommendtype, stack)
                 -- default
                 if value == nil then
-                    if recommendtype == nil then return ReactiveDictionary() end
+                    if recommendtype == nil then return Reactive() end
                     if not silent then  error("Usage: reactive[type](object[, silent]) - the data object is not provided", (stack or 1) + 1) end
                     return
                 end
@@ -290,7 +290,7 @@ PLoop(function(_ENV)
     -----------------------------------------------------------------------
     --- The references used to access reactive table/class field/property datas
     __Sealed__()
-    __Arguments__{ AnyType }:WithRebuild()
+    __Arguments__{ AnyType/nil }:WithRebuild()
     __NoNilValue__(false):AsInheritable()
     __NoRawSet__(false):AsInheritable()
     class "System.Reactive"             (function(_ENV, targettype)
@@ -312,8 +312,8 @@ PLoop(function(_ENV)
             gettempparams               = Class.GetTemplateParameters,
             safesetvalue                = Toolset.safesetvalue,
             fakefunc                    = Toolset.fakefunc,
-            properties                  = {},
-            switchObject                = function (self, new, clear)
+            properties                  = targettype and {} or nil,
+            switchObject                = targettype and function (self, new, clear)
                 -- switch for reactive fields
                 local reactives         = rawget(self, Reactive)
                 if not reactives then return end
@@ -348,10 +348,128 @@ PLoop(function(_ENV)
                 if not subject then return end
                 subject.Observable      = new and getObjectSubject(new) or nil
                 if clear then return subject:OnNext(nil) end
-            end,
+            end or nil,
 
-            Reactive, ReactiveField, IReactive, IObservable
+            Reactive, ReactiveField, IReactive, IObservable, Subject
         }
+
+        -------------------------------------------------------------------
+        --                  reactive container(Default)                  --
+        -------------------------------------------------------------------
+        if not targettype then
+            -------------------------------------------------------------------
+            --                            method                             --
+            -------------------------------------------------------------------
+            --- Subscribe the observers
+            function Subscribe(self, ...)
+                -- subscribe
+                local subject           = self[Subject]
+                local ok, sub, obs      = pcall(subject.Subscribe, subject, ...)
+                if not ok then error("Usage: reactive:Subscribe(IObserver[, Subscription]) - the argument not valid", 2) end
+                return sub, obs
+            end
+
+            -------------------------------------------------------------------
+            --                           property                            --
+            -------------------------------------------------------------------
+            --- Gets the raw value
+            property "Value"            {
+                get                     = function(self)
+                    local ret           = {}
+                    for k, v in pairs(self[Reactive]) do
+                        if isobjecttype(v, IReactive) then
+                            ret[k]      = v.Value
+                        end
+                    end
+                    return ret
+                end
+            }
+
+            -------------------------------------------------------------------
+            --                          constructor                          --
+            -------------------------------------------------------------------
+            function __ctor(self, init)
+                rawset(self, Reactive, {})
+                rawset(self, Subject, Subject())
+
+                if type(init) == "table" then
+                    for k, v in pairs(init) do
+                        -- init value
+                        if type(k) == "string" then
+                            local ok, err       = safesetvalue(self, k, v)
+                            if not ok then throw("The " .. k .. "'s value is not supported") end
+                        end
+                    end
+                end
+            end
+
+            -------------------------------------------------------------------
+            --                        de-constructor                         --
+            -------------------------------------------------------------------
+            function __dtor(self)
+                local subject           = self[Subject]
+
+                for k, v in pairs(self[Reactive]) do
+                    if v then
+                        local sub       = subject and rawget(subject, v)
+                        if sub then
+                            rawset(subject, v, nil)
+                            sub:Dispose()
+                        end
+                    end
+                end
+
+                rawset(self, Reactive, nil)
+                rawset(self, Subject, nil)
+                return subject and subject:Dispose()
+            end
+
+            -------------------------------------------------------------------
+            --                          meta-method                          --
+            -------------------------------------------------------------------
+            -- Gets the current value
+            function __index(self, key, stack)
+                return self[Reactive][key]
+            end
+
+            -- Set the new value
+            function __newindex(self, key, value, stack)
+                if type(key) ~= "string" then error("The key can only be string", (stack or 1) + 1) end
+
+                local reacts            = self[Reactive]
+                local react             = reacts[key]
+                if react then
+                    if isobjecttype(react, IReactive) then
+                        if isobjecttype(value, IReactive) then
+                            value       = value.Value
+                        elseif isobjecttype(value, IObservable) then
+                            if isobjecttype(react, ReactiveValue) then
+                                react.Observable = value
+                                return
+                            else
+                                error("The " .. key .. " is readonly", (stack or 1) + 1)
+                            end
+                        end
+
+                        local ok, err       = safesetvalue(react, "Value", value)
+                        if not ok then error(err:gsub("Value", key), (stack or 1) + 1) end
+                    else
+                        error("The " .. key .. " is readonly", (stack or 1) + 1)
+                    end
+
+                elseif isobjecttype(value, IObservable) then
+                    rawset(reacts, key, value)
+                    subscribeReactive(self, key, value)
+                else
+                    react                   = reactive(value)
+                    if not react then error("The " .. key .. "'s value is not supported", (stack or 1) + 1) end
+                    rawset(reacts, key, react)
+                    subscribeReactive(self, key, react)
+                end
+            end
+
+            return
+        end
 
         -------------------------------------------------------------------
         --                   non-dict class/interface                    --
@@ -555,7 +673,7 @@ PLoop(function(_ENV)
         --                            method                             --
         -------------------------------------------------------------------
         --- Subscribe the observers
-        function Subscribe(self, ...)                
+        function Subscribe(self, ...)
             local subject               = rawget(self, Subject)
             if not subject then
                 subject                 = Subject()
@@ -627,28 +745,9 @@ PLoop(function(_ENV)
         -------------------------------------------------------------------
         --                          meta-method                          --
         -------------------------------------------------------------------
-        if Class.Validate(targettype) or Interface.Validate(targettype) then
-            -- objects may have its private fields, block those access
-            function __newindex(self, key, value, stack)
-                error("The " .. key .. " can't be written", (stack or 1) + 1)
-            end
-        else
-            --- enable field access for non-member struct data
-            -- Gets the current value
-            function __index(self, key, stack)
-                local raw               = rawget(self, RawTable)
-                return raw and raw[key]
-            end
-
-            -- Set the new value
-            function __newindex(self, key, value, stack)
-                local raw               = rawget(self, RawTable)
-                if not raw then error("The raw object is not specified", (stack or 1) + 1) end
-
-                if raw[key] == value then return end
-                raw[key]                = value
-                return onObjectNext(raw, key, value)
-            end
+        -- objects may have its private fields, block those access
+        function __newindex(self, key, value, stack)
+            error("The " .. key .. " can't be written", (stack or 1) + 1)
         end
     end)
 end)
