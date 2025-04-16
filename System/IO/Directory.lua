@@ -56,7 +56,7 @@ PLoop(function(_ENV)
         else
             --- Get sub-directories
             __PipeRead__("ls --file-type \"%s\"", ".*", OperationSystemType.Linux)
-            __PipeRead__("export PATH='/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:/usr/X11/bin'\nls --file-type \"%s\"", ".*", OperationSystemType.MacOS)
+            __PipeRead__("export PATH='/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:/usr/X11/bin'\nls -F \"%s\"", ".*", OperationSystemType.MacOS)
             __Iterator__()
             __Static__()
             function GetDirectories(path, result)
@@ -71,7 +71,7 @@ PLoop(function(_ENV)
 
             --- Get files
             __PipeRead__("ls --file-type \"%s\"", ".*", OperationSystemType.Linux)
-            __PipeRead__("export PATH='/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:/usr/X11/bin'\nls --file-type \"%s\"", ".*", OperationSystemType.MacOS)
+            __PipeRead__("export PATH='/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:/usr/X11/bin'\nls -F \"%s\"", ".*", OperationSystemType.MacOS)
             __Iterator__()
             __Static__()
             function GetFiles(path, result)

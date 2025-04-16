@@ -312,6 +312,7 @@ PLoop(function(_ENV)
             gettempparams               = Class.GetTemplateParameters,
             safesetvalue                = Toolset.safesetvalue,
             fakefunc                    = Toolset.fakefunc,
+            applyfuncattr               = Toolset.applyfuncattr,
             properties                  = targettype and {} or nil,
             switchObject                = targettype and function (self, new, clear)
                 -- switch for reactive fields
@@ -457,9 +458,13 @@ PLoop(function(_ENV)
                         error("The " .. key .. " is readonly", (stack or 1) + 1)
                     end
 
+                elseif type(value) == "function" then
+                    rawset(self, key, applyfuncattr(self, key, value, (stack or 1) + 1))
+
                 elseif isobjecttype(value, IObservable) then
                     rawset(reacts, key, value)
                     subscribeReactive(self, key, value)
+
                 else
                     react                   = reactive(value)
                     if not react then error("The " .. key .. "'s value is not supported", (stack or 1) + 1) end

@@ -33,8 +33,8 @@
 -- Author       :   kurapica125@outlook.com                                  --
 -- URL          :   http://github.com/kurapica/PLoop                         --
 -- Create Date  :   2017/04/02                                               --
--- Update Date  :   2025/04/10                                               --
--- Version      :   2.0.5                                                    --
+-- Update Date  :   2025/04/16                                               --
+-- Version      :   2.0.6                                                    --
 --===========================================================================--
 
 -------------------------------------------------------------------------------
@@ -1693,6 +1693,22 @@ do
         end
     end
 
+    -- apply attribute on function
+    function applyAttrOnFunc (self, name, value, stack)
+        stack                           = parsestack(stack) + 1
+        if attribute.HaveRegisteredAttributes() then
+            attribute.SaveAttributes(value, ATTRTAR_FUNCTION, stack)
+            local final                 = attribute.InitDefinition(value, ATTRTAR_FUNCTION, value, self, name, stack)
+            if final ~= value then
+                attribute.ToggleTarget(value, final)
+                value                   = final
+            end
+            attribute.ApplyAttributes (value, ATTRTAR_FUNCTION, nil, self, name, stack)
+            attribute.AttachAttributes(value, ATTRTAR_FUNCTION, self, name, stack)
+        end
+        return value
+    end
+
     -----------------------------------------------------------------------
     --                             prototype                             --
     -----------------------------------------------------------------------
@@ -2202,6 +2218,7 @@ do
                 uinsert(apis, "type")
                 uinsert(apis, "parsestack")
                 uinsert(apis, "rawset")
+                uinsert(apis, "applyAttrOnFunc")
 
                 tinsert(body, [[
                     return function(env, key, value, stack)
@@ -2255,15 +2272,8 @@ do
                 end
 
                 tinsert(body, [[
-                        if type(key)   == "string" and type(value) == "function" and attribute.HaveRegisteredAttributes() then
-                            attribute.SaveAttributes(value, ATTRTAR_FUNCTION, stack)
-                            local final = attribute.InitDefinition(value, ATTRTAR_FUNCTION, value, env, key, stack)
-                            if final ~= value then
-                                attribute.ToggleTarget(value, final)
-                                value   = final
-                            end
-                            attribute.ApplyAttributes (value, ATTRTAR_FUNCTION, nil, env, key, stack)
-                            attribute.AttachAttributes(value, ATTRTAR_FUNCTION, env, key, stack)
+                        if type(key)   == "string" and type(value) == "function" then
+                            value       = applyAttrOnFunc(env, key, value, stack)
                         end
                         return rawset(env, key, value)
                     end
@@ -7303,8 +7313,7 @@ do
                 ]])
 
                 if validateflags(FLG_IC_OMDATR, token) then
-                    uinsert(apis, "attribute")
-                    uinsert(apis, "ATTRTAR_FUNCTION")
+                    uinsert(apis, "applyAttrOnFunc")
 
                     if validateflags(FLG_IC_NRAWST, token) then
                         tinsert(body, [[
@@ -7313,16 +7322,7 @@ do
                     end
 
                     tinsert(body, [[
-                        if attribute.HaveRegisteredAttributes() then
-                            attribute.SaveAttributes(value, ATTRTAR_FUNCTION, 2)
-                            local ret   = attribute.InitDefinition(value, ATTRTAR_FUNCTION, value, self, key, 2)
-                            if value ~= ret then
-                                attribute.ToggleTarget(value, ret)
-                                value   = ret
-                            end
-                            attribute.ApplyAttributes (value, ATTRTAR_FUNCTION, nil, self, key, 2)
-                            attribute.AttachAttributes(value, ATTRTAR_FUNCTION, self, key, 2)
-                        end
+                        value           = applyAttrOnFunc(self, key, value, 2)
                     ]])
                 else
                     tinsert(head, "methods")
@@ -11070,19 +11070,8 @@ do
 
                 if type(delegate) == "function" then
                     odel                = odel or self:Get(obj)
+                    odel:SetFinalFunction(applyAttrOnFunc(obj, info[FLD_EVENT_NAME], delegate, stack))
 
-                    if attribute.HaveRegisteredAttributes() then
-                        local name      = info[FLD_EVENT_NAME]
-                        attribute.SaveAttributes(delegate, ATTRTAR_FUNCTION, stack)
-                        local ret       = attribute.InitDefinition(delegate, ATTRTAR_FUNCTION, delegate, obj, name, stack)
-                        if ret ~= delegate then
-                            attribute.ToggleTarget(delegate, ret)
-                            delegate    = ret
-                        end
-                        attribute.ApplyAttributes(delegate, ATTRTAR_FUNCTION, nil, obj, name, stack)
-                        attribute.AttachAttributes(delegate, ATTRTAR_FUNCTION, obj, name, stack)
-                    end
-                    odel:SetFinalFunction(delegate)
                 elseif getmetatable(delegate) == Delegate then
                     odel                = odel or self:Get(obj)
 
@@ -14926,6 +14915,9 @@ do
 
         --- Safe call setvalue and return the error
         safesetvalue                    = function(self, key, value) local ok, err = pcall(setfield, self, key, value) return ok, not ok and tostring(err):gsub("^.-:%d+:%s*", "") or nil end,
+
+        -- Apply attribute on function
+        applyfuncattr                   = function(self, key, func, stack) func = applyAttrOnFunc(self, key, func, parsestack(stack) + 1) return func end
     }
 
     --- the attribute to build the overload system, also can be used to set
@@ -16595,9 +16587,7 @@ do
             tinsert                     = tinsert,
             tremove                     = tremove,
             ipairs                      = ipairs,
-            ATTRTAR_FUNCTION            = AttributeTargets.Function,
-
-            Attribute
+            applyAttrOnFunc             = applyAttrOnFunc,
         }
 
         -----------------------------------------------------------
@@ -16686,19 +16676,7 @@ do
         -- @usage   obj.OnEvent = obj.OnEvent + func
         __Arguments__{ Function }
         function __add(self, func)
-            if Attribute.HaveRegisteredAttributes() then
-                local owner             = self.Owner
-                local name              = self.Name
-
-                Attribute.SaveAttributes(func, ATTRTAR_FUNCTION, 2)
-                local ret               = Attribute.InitDefinition(func, ATTRTAR_FUNCTION, func, owner, name, 2)
-                if ret ~= func then
-                    Attribute.ToggleTarget(func, ret)
-                    func                = ret
-                end
-                Attribute.ApplyAttributes (func, ATTRTAR_FUNCTION, nil, owner, name, 2)
-                Attribute.AttachAttributes(func, ATTRTAR_FUNCTION, owner, name, 2)
-            end
+            func                        = applyAttrOnFunc(self.Owner, self.Name, func, 2)
 
             local slot
 
