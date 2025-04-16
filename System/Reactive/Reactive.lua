@@ -472,8 +472,6 @@ PLoop(function(_ENV)
                     subscribeReactive(self, key, react)
                 end
             end
-
-            return
         end
 
         -------------------------------------------------------------------
