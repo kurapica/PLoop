@@ -355,16 +355,63 @@ PLoop(function(_ENV)
         }
 
         -------------------------------------------------------------------
+        --                        de-constructor                         --
+        -------------------------------------------------------------------
+        function __dtor(self)
+            local subject               = rawget(self, Subject)
+
+            for k, v in pairs(self[Reactive]) do
+                if v then
+                    local subscription  = subject and rawget(subject, v)
+                    if subscription then
+                        rawset(subject, v, nil)
+                        subscription:Dispose()
+                    end
+
+                    -- only reactive fields will be disposed with the parent
+                    if isobjecttype(v, ReactiveField) then v:Dispose() end
+                end
+            end
+
+            rawset(self, RawTable, nil)
+            rawset(self, Reactive, nil)
+            return subject and subject:Dispose()
+        end
+
+        -------------------------------------------------------------------
         --                  reactive container(Default)                  --
         -------------------------------------------------------------------
         if not targettype then
+            export                      {
+                subscribeReactiveSimple = function(self, k, r)
+                    local subject       = rawget(self, Subject)
+                    if r and subject and not rawget(subject, r) then
+                        rawset(subject, r, (r:Subscribe(
+                            function(...) return subject:OnNext(k, ...) end,
+                            function(ex)  return subject:OnError(ex) end
+                        )))
+                    end
+                end
+            }
+
+
             -------------------------------------------------------------------
             --                            method                             --
             -------------------------------------------------------------------
             --- Subscribe the observers
             function Subscribe(self, ...)
+                -- lazy loading
+                local subject           = rawget(self, Subject)
+                if not subject then
+                    subject             = Subject()
+                    rawset(self, Subject, subject)
+
+                    for k, v in pairs(self[Reactive]) do
+                        subscribeReactiveSimple(self, k, v)
+                    end
+                end
+
                 -- subscribe
-                local subject           = self[Subject]
                 local ok, sub, obs      = pcall(subject.Subscribe, subject, ...)
                 if not ok then error("Usage: reactive:Subscribe(IObserver[, Subscription]) - the argument not valid", 2) end
                 return sub, obs
@@ -391,7 +438,6 @@ PLoop(function(_ENV)
             -------------------------------------------------------------------
             function __ctor(self, init)
                 rawset(self, Reactive, {})
-                rawset(self, Subject, Subject())
 
                 if type(init) == "table" then
                     for k, v in pairs(init) do
@@ -402,27 +448,6 @@ PLoop(function(_ENV)
                         end
                     end
                 end
-            end
-
-            -------------------------------------------------------------------
-            --                        de-constructor                         --
-            -------------------------------------------------------------------
-            function __dtor(self)
-                local subject           = self[Subject]
-
-                for k, v in pairs(self[Reactive]) do
-                    if v then
-                        local sub       = subject and rawget(subject, v)
-                        if sub then
-                            rawset(subject, v, nil)
-                            sub:Dispose()
-                        end
-                    end
-                end
-
-                rawset(self, Reactive, nil)
-                rawset(self, Subject, nil)
-                return subject and subject:Dispose()
             end
 
             -------------------------------------------------------------------
@@ -463,13 +488,13 @@ PLoop(function(_ENV)
 
                 elseif isobjecttype(value, IObservable) then
                     rawset(reacts, key, value)
-                    subscribeReactive(self, key, value)
+                    subscribeReactiveSimple(self, key, value)
 
                 else
                     react                   = reactive(value)
                     if not react then error("The " .. key .. "'s value is not supported", (stack or 1) + 1) end
                     rawset(reacts, key, react)
-                    subscribeReactive(self, key, react)
+                    subscribeReactiveSimple(self, key, react)
                 end
             end
         end
@@ -719,30 +744,6 @@ PLoop(function(_ENV)
         function __ctor(self, init)
             rawset(self, Reactive, {})
             rawset(self, RawTable, init)
-        end
-
-        -------------------------------------------------------------------
-        --                        de-constructor                         --
-        -------------------------------------------------------------------
-        function __dtor(self)
-            local subject               = rawget(self, Subject)
-
-            for k, v in pairs(self[Reactive]) do
-                if v then
-                    local subscription  = subject and rawget(subject, v)
-                    if subscription then
-                        rawset(subject, v, nil)
-                        subscription:Dispose()
-                    end
-
-                    -- only reactive fields will be disposed with the parent
-                    if isobjecttype(v, ReactiveField) then v:Dispose() end
-                end
-            end
-
-            rawset(self, RawTable, nil)
-            rawset(self, Reactive, nil)
-            return subject and subject:Dispose()
         end
 
         -------------------------------------------------------------------
