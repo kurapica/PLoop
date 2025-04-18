@@ -477,7 +477,7 @@ PLoop(function(_ENV)
                             end
                         end
 
-                        local ok, err       = safesetvalue(react, "Value", value)
+                        local ok, err   = safesetvalue(react, "Value", value)
                         if not ok then error(err:gsub("Value", key), (stack or 1) + 1) end
                     else
                         error("The " .. key .. " is readonly", (stack or 1) + 1)
@@ -491,7 +491,7 @@ PLoop(function(_ENV)
                     subscribeReactiveSimple(self, key, value)
 
                 else
-                    react                   = reactive(value)
+                    react               = reactive(value)
                     if not react then error("The " .. key .. "'s value is not supported", (stack or 1) + 1) end
                     rawset(reacts, key, react)
                     subscribeReactiveSimple(self, key, react)
