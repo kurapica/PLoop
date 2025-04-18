@@ -43,6 +43,7 @@ PLoop(function(_ENV)
         -------------------------------------------------------------------
         export                          {
             type                        = type,
+            next                        = next,
             getmetatable                = getmetatable,
             issubtype                   = Class.IsSubType,
             isvaluetype                 = Class.IsValueType,
@@ -94,7 +95,7 @@ PLoop(function(_ENV)
 
             -- get reactive type
             if metatype == nil then
-                return valtype == "table" and (isarray(value) and ReactiveList or Reactive) or nil
+                return valtype == "table" and (next(value) ~= nil and isarray(value) and ReactiveList or Reactive) or nil
 
             elseif metatype == Any then
                 return asfield and ReactiveField or ReactiveValue
