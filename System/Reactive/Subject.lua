@@ -77,6 +77,10 @@ PLoop(function(_ENV)
         __Abstract__()
         property "KeepAlive"            { type = Boolean }
 
+        --- Whether queue task when publish
+        __Abstract__()
+        property "UseTaskQueue"         { type = Boolean }
+
         --- The observable that the subject subscribed
         __Abstract__()
         property "Observable"           {
@@ -104,12 +108,25 @@ PLoop(function(_ENV)
 
             local obs                   = self.Observers
             local becold                = false
-            for ob, sub in pairs(obs) do
-                if not sub.IsUnsubscribed then
-                    ob:OnNext(...)
-                else
-                    obs[ob]             = nil
-                    becold              = true
+            local scheduler             = self.UseTaskQueue and TaskScheduler.Default
+
+            if scheduler then
+                for ob, sub in pairs(obs) do
+                    if not sub.IsUnsubscribed then
+                        scheduler:QueueTask(ob.OnNext, ob, ...)
+                    else
+                        obs[ob]         = nil
+                        becold          = true
+                    end
+                end
+            else
+                for ob, sub in pairs(obs) do
+                    if not sub.IsUnsubscribed then
+                        ob:OnNext(...)
+                    else
+                        obs[ob]         = nil
+                        becold          = true
+                    end
                 end
             end
 
