@@ -31,6 +31,7 @@ You can also find useful features for enterprise development like code organizat
 * [Interface](#interface)
 * [Serialization](#serialization)
 	* [JSON Format](#json-format)
+* [Reactive & Watch](#reactive--watch)
 * [Data Entity](#data-entity)
 * [Web FrameWork](#web-framework)
 
@@ -640,6 +641,40 @@ For the **StringFormatProvider**, also we can use `Toolset.tostring(data[, type[
 string, or use `Toolset.parsestring(str[, type])` deserialize the string to the data or object.
 
 
+## Reactive & Watch
+
+The PLoop has provided a full implementation for reactive pattern. Also a watch system to simple the work like
+
+```lua
+require "PLoop" (function(_ENV)
+    Logger.Default:AddHandler(print)
+
+    data = reactive{
+        x = 3,
+        y = 4,
+        z = 0,
+    }
+
+    -- The watch'll subscribe data.x and data.y when access them
+    -- the data.z will subscribe the watch to receive the result
+    data.z = watch(function(_ENV) return math.sqrt(data.x ^2 + data.y ^ 2) end)
+
+    -- [Info]Z-->5
+    data.z:Dump("Z")
+
+    -- change data.x will trigger the watch to update the z
+    -- [Info]Z-->300.02666548159
+    data.x = 300
+
+    -- [Info]Z-->500
+    data.y = 400
+end)
+```
+
+Check [021.reactive.md](https://github.com/kurapica/PLoop/blob/master/Docs/021.reactive.md) and [026.watch_reactive.md](https://github.com/kurapica/PLoop/blob/master/Docs/026.watch_reactive.md) for more details.
+
+
+
 ## Data Entity
 
 With the **Systm.Data** lib, we can define data entity classes that represents a data base
@@ -726,7 +761,6 @@ end)
 ```
 
 The web framework also provide a powerful template system and MVC framework, you can find the details in [020.web.md](https://github.com/kurapica/PLoop/blob/master/Docs/020.web.md)
-
 
 
 ## Contancts

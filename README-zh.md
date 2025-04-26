@@ -145,7 +145,7 @@
 	* [System.Collections.IDictionary](#systemcollectionsidictionary)
 		* [System.Collections.Dictionary](#systemcollectionsdictionary)
 	* [List, Dictionary和序列化](#list-dictionary和序列化)
-
+* [Reactive & Watch](#reactive--watch)
 
 ## 安装
 
@@ -5333,3 +5333,39 @@ end)
 ```
 
 现在，序列化系统可以获知键值的类型，我们也能获得我们所需要的对象。
+
+
+
+
+## Reactive & Watch
+
+PLoop完整实现了Reactive编程范式，并且类似react和vue提供了一套新的watch观察者系统，用于简化开发方式。
+
+```lua
+require "PLoop" (function(_ENV)
+    Logger.Default:AddHandler(print)
+
+    -- 申明reactive对象以及字段，基于初始数据决定字段类型
+    data = reactive{
+        x = 3,
+        y = 4,
+        z = 0,
+    }
+
+    -- watch会基于访问订阅data.x和data.y，同时它的计算结果被data.z订阅
+    data.z = watch(function(_ENV) return math.sqrt(data.x ^2 + data.y ^ 2) end)
+
+    -- [Info]Z-->5
+    data.z:Dump("Z")
+
+    -- 修改data.x会触发watch的代码执行，并推送结果给data.z
+    -- [Info]Z-->300.02666548159
+    data.x = 300
+
+    -- [Info]Z-->500
+    data.y = 400
+end)
+```
+
+详情请参考 [021.reactive.md](https://github.com/kurapica/PLoop/blob/master/Docs/021.reactive.md) 和 [026.watch_reactive.md](https://github.com/kurapica/PLoop/blob/master/Docs/026.watch_reactive.md)。
+
