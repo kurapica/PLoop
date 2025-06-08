@@ -92,7 +92,7 @@ do
             abs                         = math.abs,
             floor                       = math.floor,
             mlog                        = math.log,
-            mpow                        = math.pow,
+            mpow                        = math.pow or load("return function(a, b) return a^b end")(),
             random                      = math.random,
 
             -- Safe
@@ -14842,7 +14842,7 @@ do
         -- @param   tar: the target table
         -- @param   deep: whether check the deep level tables
         -- @param   override: whether override the values in the target table
-        -- @param   safe: whether there could be the same table in teh source
+        -- @param   safe: whether there could be the same table in the source
         -- @return  tar
         copy                            = tblclone,
 
@@ -14882,18 +14882,6 @@ do
         -- @param   targetvalue     the target value
         -- @return  boolean         true if the target value contains the chkvalue
         validateflags                   = validateflags,
-
-        --- add the check value to the target value
-        -- @param   chkvalue        the check value, must be 2^n
-        -- @param   targetvalue     the target value
-        -- @return  targetvalue     the target value contains the check value
-        turnonflags                     = turnonflags,
-
-        --- remove the check value to the target value
-        -- @param   chkvalue        the check value, must be 2^n
-        -- @param   targetvalue     the target value
-        -- @return  targetvalue     the target value don't contains the check value
-        turnoffflags                    = turnoffflags,
 
         --- A readonly function used by meta-table
         readonly                        = readonly,
