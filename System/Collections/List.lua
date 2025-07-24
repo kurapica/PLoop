@@ -228,7 +228,7 @@ PLoop(function(_ENV)
         --- Splice
         __Arguments__{ Integer, Integer, RawTable }
         function Splice(self, index, count, raw)
-            return Splice(index, count, ipairs(raw))
+            return Splice(self, index, count, ipairs(raw))
         end
 
         --- Spice
