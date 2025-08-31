@@ -2610,7 +2610,7 @@ do
                     error("Usage: namespace.SaveNamespace([root, ]path, feature[, stack]) - the feature should be userdata or table", stack)
                 end
 
-                if _NSName[feature] ~= nil then
+                if _NSName[feature] then
                     local epath         = _Cache()
                     if _NSName[root] then tinsert(epath, _NSName[root]) end
                     path:gsub("[%P_]+", function(name) tinsert(epath, name) end)
